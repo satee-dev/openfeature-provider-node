@@ -32,6 +32,13 @@ describe("fixture server", () => {
     assert.notEqual((await get(path)).headers.get("etag"), before);
   });
 
+  it("serves a body under a given ETag, ignoring If-None-Match when told to", async () => {
+    server.serve(payloads.revision(43), { etag: '"pinned"', ignoreIfNoneMatch: true });
+    const res = await get(path, { "If-None-Match": '"pinned"' });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("etag"), '"pinned"');
+  });
+
   it("refuses a query string or another path shape with 403", async () => {
     assert.equal((await get(`${path}?x=1`)).status, 403);
     assert.equal((await get("/fixture0001/other.json")).status, 403);

@@ -26,9 +26,11 @@ export const payloads = {
   }),
   withoutRevision: editExample((file) => {
     delete file.metadata.revision;
+    file.flags["beta-banner"] = { state: "ENABLED", variants: { on: true, off: false }, defaultVariant: "on" };
   }),
   lowerRevision: editExample((file) => {
     file.metadata.revision = 41;
+    file.flags["beta-banner"] = { state: "ENABLED", variants: { on: true, off: false }, defaultVariant: "on" };
   }),
   revision: (revision: number, edit: (file: FlagFile) => void = () => {}) =>
     editExample((file) => {
@@ -37,14 +39,15 @@ export const payloads = {
     }),
 };
 
-export type RecordedRequest = { url: string; headers: IncomingHttpHeaders };
+export type RecordedRequest = { url: string; headers: IncomingHttpHeaders; abandoned: boolean };
 
 type Behavior = { kind: "serve" } | { kind: "status"; status: number } | { kind: "slow"; delayMs: number };
 
 export type FixtureServer = {
   readonly baseUrl: string;
   readonly requests: RecordedRequest[];
-  serve(body: string): void;
+  /** `etag` replaces the computed one; `ignoreIfNoneMatch` answers 200 even when it matches. */
+  serve(body: string, options?: { etag?: string; ignoreIfNoneMatch?: boolean }): void;
   respondWith(status: 404 | 403 | 429 | 500): void;
   respondSlowly(delayMs: number): void;
   close(): Promise<void>;
@@ -55,13 +58,17 @@ function etagOf(body: string): string {
 }
 
 export async function startFixtureServer(initialBody: string = exampleFlags): Promise<FixtureServer> {
-  let current = { body: initialBody, etag: etagOf(initialBody) };
+  let current = { body: initialBody, etag: etagOf(initialBody), ignoreIfNoneMatch: false };
   let behavior: Behavior = { kind: "serve" };
   const requests: RecordedRequest[] = [];
   const pending = new Set<NodeJS.Timeout>();
 
   const server = createServer((req, res) => {
-    requests.push({ url: req.url ?? "", headers: req.headers });
+    const recorded = { url: req.url ?? "", headers: req.headers, abandoned: false };
+    requests.push(recorded);
+    res.on("close", () => {
+      recorded.abandoned = !res.writableFinished;
+    });
     const match = /^\/([^/?]+)\/flags\.json$/.exec(req.url ?? "");
     if (!match) {
       res.writeHead(403).end();
@@ -75,9 +82,9 @@ export async function startFixtureServer(initialBody: string = exampleFlags): Pr
       res.writeHead(behavior.status).end();
       return;
     }
-    const { body, etag } = current;
+    const { body, etag, ignoreIfNoneMatch } = current;
     const send = () => {
-      if (req.headers["if-none-match"] === etag) {
+      if (!ignoreIfNoneMatch && req.headers["if-none-match"] === etag) {
         res.writeHead(304, { ETag: etag }).end();
       } else {
         res.writeHead(200, { "Content-Type": "application/json", ETag: etag }).end(body);
@@ -100,8 +107,8 @@ export async function startFixtureServer(initialBody: string = exampleFlags): Pr
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     requests,
-    serve(body) {
-      current = { body, etag: etagOf(body) };
+    serve(body, { etag = etagOf(body), ignoreIfNoneMatch = false } = {}) {
+      current = { body, etag, ignoreIfNoneMatch };
       behavior = { kind: "serve" };
     },
     respondWith(status) {
