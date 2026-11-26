@@ -40,7 +40,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.9",
+    "@openfeature/server-sdk": "1.23.0",
     "@types/node": "22.20.7",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@openfeature/flagd-core": "5.0.0"
+  },
+  "peerDependencies": {
+    "@openfeature/server-sdk": "^1.23.0"
   }
 }
