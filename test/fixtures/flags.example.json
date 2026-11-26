@@ -1,0 +1,19 @@
+{
+  "$schema": "https://flagd.dev/schema/v0/flags.json",
+  "metadata": {
+    "revision": 42,
+    "publishedAt": "2026-11-26T10:15:00Z"
+  },
+  "flags": {
+    "beta-banner": {
+      "state": "ENABLED",
+      "variants": { "on": true, "off": false },
+      "defaultVariant": "off"
+    },
+    "new-checkout": {
+      "state": "ENABLED",
+      "variants": { "on": true, "off": false },
+      "defaultVariant": "on"
+    }
+  }
+}
