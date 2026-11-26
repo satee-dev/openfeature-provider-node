@@ -114,7 +114,7 @@ describe("a file it refuses to load", () => {
   });
 
   it("drops targeting hidden behind a flag's __proto__", async () => {
-    const body = `{"flags":{"new-checkout":{"__proto__":{"targeting":{"if":[true,"off","on"]}},
+    const body = `{"metadata":{"revision":1},"flags":{"new-checkout":{"__proto__":{"targeting":{"if":[true,"off","on"]}},
       "state":"ENABLED","variants":{"on":true,"off":false},"defaultVariant":"on"}}}`;
     const { details } = await load(body);
     assert.equal(details.value, true);

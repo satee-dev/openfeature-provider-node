@@ -1,18 +1,20 @@
-import type { FlagdCore } from "@openfeature/flagd-core";
 import {
   ErrorCode,
   type EvaluationContext,
   type JsonValue,
   type Logger,
+  OpenFeatureEventEmitter,
   type Provider,
+  ProviderEvents,
   type ResolutionDetails,
   StandardResolutionReasons,
 } from "@openfeature/server-sdk";
-import { FlagFileError, parseFlagFile, readBody } from "./flag-file.ts";
+import { changedKeys, FlagFileError, type FlagSet, parseFlagFile, readBody } from "./flag-file.ts";
 import { VERSION } from "./version.ts";
 
 const KEY_PREFIX = "satee_sdk_";
 const REQUEST_TIMEOUT_MS = 5000;
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export type SateeProviderOptions = {
   sdkKey: string | undefined;
@@ -21,12 +23,18 @@ export type SateeProviderOptions = {
   logger?: Logger;
 };
 
+/** Lets tests poll faster than the public floor. */
+export const testTiming: unique symbol = Symbol("satee.testTiming");
+type Timing = { minPollMs: number };
+
 const consoleLogger: Logger = {
   debug: () => {},
   info: () => {},
   warn: (...args) => console.warn(...args),
   error: (...args) => console.error(...args),
 };
+
+type PollResult = { ok: true; changed: string[] } | { ok: false; reason: string };
 
 function describeFailure(error: unknown): string {
   if (error instanceof FlagFileError) return error.message;
@@ -38,11 +46,16 @@ function describeFailure(error: unknown): string {
 export class SateeProvider implements Provider {
   readonly metadata = { name: "Satee" } as const;
   readonly runsOn = "server";
+  readonly events = new OpenFeatureEventEmitter();
 
   readonly #url: string;
   readonly #keyHint: string;
   readonly #logger: Logger;
-  #flags: FlagdCore | undefined;
+  readonly #pollIntervalMs: number;
+  #closed = new AbortController();
+  #held: FlagSet | undefined;
+  #etag: string | null = null;
+  #timer: NodeJS.Timeout | undefined;
 
   constructor(options: SateeProviderOptions) {
     const { sdkKey } = options;
@@ -56,22 +69,71 @@ export class SateeProvider implements Provider {
     this.#url = `${baseUrl}/${encodeURIComponent(secret)}/flags.json`;
     this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
     this.#logger = options.logger ?? consoleLogger;
+    const timing: Timing = { minPollMs: 1000, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };
+    const requested = options.pollIntervalMs;
+    const interval = requested !== undefined && Number.isFinite(requested) ? requested : 5000;
+    this.#pollIntervalMs = Math.min(MAX_TIMER_MS, Math.max(timing.minPollMs, interval));
   }
 
   async initialize(): Promise<void> {
+    this.#closed = new AbortController();
+    const { signal } = this.#closed;
+    const result = await this.#poll(signal);
+    if (!result.ok && !signal.aborted) {
+      this.#logger.warn(`Satee: could not load flags for ${this.#keyHint} (${result.reason})`);
+    }
+    this.#scheduleNextPoll(signal);
+  }
+
+  async onClose(): Promise<void> {
+    this.#closed.abort();
+    clearTimeout(this.#timer);
+  }
+
+  // Each start owns its signal, so a poll that outlives a close cannot revive polling after a restart.
+  #scheduleNextPoll(signal: AbortSignal): void {
+    if (signal.aborted) return;
+    this.#timer = setTimeout(async () => {
+      try {
+        const result = await this.#poll(signal);
+        if (signal.aborted) return;
+        if (result.ok && result.changed.length > 0) {
+          this.events.emit(ProviderEvents.ConfigurationChanged, { flagsChanged: result.changed });
+        }
+        if (!result.ok) this.#logger.debug(`Satee: poll failed for ${this.#keyHint} (${result.reason})`);
+      } catch {
+        // A throwing logger must not stop polling.
+      } finally {
+        this.#scheduleNextPoll(signal);
+      }
+    }, this.#pollIntervalMs).unref();
+  }
+
+  async #poll(signal: AbortSignal): Promise<PollResult> {
+    const headers: Record<string, string> = { "User-Agent": `satee-openfeature-node/${VERSION}` };
+    if (this.#etag !== null) headers["If-None-Match"] = this.#etag;
     try {
       const response = await fetch(this.#url, {
-        headers: { "User-Agent": `satee-openfeature-node/${VERSION}` },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers,
+        signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal]),
       });
+      const etag = response.headers.get("etag");
+      if (response.status === 304 || (response.status === 200 && etag !== null && etag === this.#etag)) {
+        await response.body?.cancel();
+        return { ok: true, changed: [] };
+      }
       if (response.status !== 200) {
         await response.body?.cancel();
-        this.#logger.warn(`Satee: could not load flags for ${this.#keyHint} (HTTP ${response.status})`);
-        return;
+        return { ok: false, reason: `HTTP ${response.status}` };
       }
-      this.#flags = parseFlagFile(await readBody(response), this.#logger);
+      const next = parseFlagFile(await readBody(response), this.#held?.revision, this.#logger);
+      if (signal.aborted) return { ok: false, reason: "closed" };
+      const changed = changedKeys(this.#held?.flags ?? {}, next.flags);
+      this.#held = next;
+      this.#etag = etag;
+      return { ok: true, changed };
     } catch (error) {
-      this.#logger.warn(`Satee: could not load flags for ${this.#keyHint} (${describeFailure(error)})`);
+      return { ok: false, reason: describeFailure(error) };
     }
   }
 
@@ -96,9 +158,9 @@ export class SateeProvider implements Provider {
     return this.#resolve((flags) => flags.resolveObjectEvaluation(key, defaultValue, context, logger), defaultValue);
   }
 
-  async #resolve<T>(evaluate: (flags: FlagdCore) => ResolutionDetails<T>, defaultValue: T) {
-    const flags = this.#flags;
-    if (!flags) {
+  async #resolve<T>(evaluate: (flags: FlagSet["evaluator"]) => ResolutionDetails<T>, defaultValue: T) {
+    const held = this.#held;
+    if (!held) {
       return {
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
@@ -106,6 +168,6 @@ export class SateeProvider implements Provider {
         errorMessage: "Satee flags are not loaded yet",
       };
     }
-    return evaluate(flags);
+    return evaluate(held.evaluator);
   }
 }

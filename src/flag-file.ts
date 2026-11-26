@@ -4,6 +4,14 @@ import type { Logger } from "@openfeature/server-sdk";
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
+type Flag = { state?: unknown; variants: Record<string, unknown>; defaultVariant: string; metadata?: unknown };
+
+export type FlagSet = {
+  readonly revision: number;
+  readonly flags: Readonly<Record<string, Flag>>;
+  readonly evaluator: FlagdCore;
+};
+
 export class FlagFileError extends Error {
   override name = "FlagFileError";
 }
@@ -30,9 +38,15 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const hasTargeting = (flag: unknown) =>
   isObject(flag) && Object.hasOwn(flag, "targeting") && !isDeepStrictEqual(flag.targeting, {});
 
+const isFlag = (flag: unknown): flag is Flag =>
+  isObject(flag) &&
+  isObject(flag.variants) &&
+  typeof flag.defaultVariant === "string" &&
+  Object.hasOwn(flag.variants, flag.defaultVariant);
+
 const FLAG_FIELDS = ["state", "variants", "defaultVariant", "metadata"];
 
-export function parseFlagFile(body: string, logger: Logger): FlagdCore {
+export function parseFlagFile(body: string, heldRevision: number | undefined, logger: Logger): FlagSet {
   let file: unknown;
   try {
     file = JSON.parse(body);
@@ -54,12 +68,30 @@ export function parseFlagFile(body: string, logger: Logger): FlagdCore {
         : flag,
     ]),
   );
-  const flags = new FlagdCore(undefined, {
+  const invalid = Object.keys(flagsOnly).find((key) => !isFlag(flagsOnly[key]));
+  if (invalid !== undefined)
+    throw new FlagFileError(`flag "${invalid}" needs variants and a defaultVariant among them`);
+  const revision = isObject(file.metadata) ? file.metadata.revision : undefined;
+  if (typeof revision !== "number" || !Number.isInteger(revision)) {
+    throw new FlagFileError("file has no integer metadata.revision");
+  }
+  if (heldRevision !== undefined && revision < heldRevision) {
+    throw new FlagFileError(`revision ${revision} is older than the held revision ${heldRevision}`);
+  }
+  const evaluator = new FlagdCore(undefined, {
     debug: () => {},
     info: () => {},
     warn: (...args) => logger.warn("Satee: flagd:", ...args),
     error: (...args) => logger.error("Satee: flagd:", ...args),
   });
-  flags.setConfigurations(JSON.stringify({ flags: flagsOnly, metadata: file.metadata }));
-  return flags;
+  evaluator.setConfigurations(JSON.stringify({ flags: flagsOnly, metadata: file.metadata }));
+  return { revision, flags: flagsOnly as Record<string, Flag>, evaluator };
+}
+
+export function changedKeys(before: FlagSet["flags"], after: FlagSet["flags"]): string[] {
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => {
+    const was = Object.hasOwn(before, key) ? before[key] : undefined;
+    const now = Object.hasOwn(after, key) ? after[key] : undefined;
+    return !isDeepStrictEqual(was, now);
+  });
 }
