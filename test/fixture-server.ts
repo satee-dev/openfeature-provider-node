@@ -57,7 +57,10 @@ function etagOf(body: string): string {
   return `"${createHash("sha256").update(body).digest("hex").slice(0, 16)}"`;
 }
 
-export async function startFixtureServer(initialBody: string = exampleFlags): Promise<FixtureServer> {
+export async function startFixtureServer(
+  initialBody: string = exampleFlags,
+  { port: requestedPort = 0 }: { port?: number } = {},
+): Promise<FixtureServer> {
   let current = { body: initialBody, etag: etagOf(initialBody), ignoreIfNoneMatch: false };
   let behavior: Behavior = { kind: "serve" };
   const requests: RecordedRequest[] = [];
@@ -101,7 +104,7 @@ export async function startFixtureServer(initialBody: string = exampleFlags): Pr
     }
   });
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(requestedPort, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
 
   return {
