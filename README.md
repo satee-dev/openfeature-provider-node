@@ -122,6 +122,11 @@ npm pack --dry-run
 `npm run check:live` reads a real file from the test host, `https://flags-test.satee.dev`, and checks that the
 provider serves it. Set `SATEE_SDK_KEY` to a key for that host, and `SATEE_BASE_URL` to point at another one.
 
+`src/flag-file.ts` holds the file handling a browser provider can share: it imports nothing from `node:`, and the caller
+passes in the SHA-256 function. Its import of `@openfeature/flagd-core` still reaches a Node built-in: flagd-core's
+CommonJS build requires `object-hash`, which requires `crypto`. A browser provider needs one of two ways out: a bundler
+that picks `object-hash`'s browser build, or an evaluator other than flagd-core.
+
 ## Releasing
 
 Pushing a tag `v<version>` on main, matching `package.json`, runs `.github/workflows/publish.yml`. One job reruns the
