@@ -67,7 +67,10 @@ reported once, when it starts, not on every failed poll.
 
 - **Nothing loaded within 5 seconds of start**: `setProviderAndWait` resolves anyway. The SDK emits `Ready` as it
   resolves, and the provider emits `Error` with "Could not load flags yet" straight after. Every flag returns the
-  default you passed, with `PROVIDER_NOT_READY`. Polling carries on at the normal interval.
+  default you passed, with `PROVIDER_NOT_READY`. Polling carries on at the normal interval. Until that `Error`
+  arrives, on the tick after the `await`, `providerStatus` still reads `READY`, so check for the `Error` event or
+  evaluate a flag rather than reading the status. A handler added after the failure gets the SDK's replay of the
+  `Error`, without the message.
 - **No successful poll for 60 seconds** after flags were loaded: the provider emits `Stale` with "Could not refresh
   flags; serving the last good values", and keeps serving them.
 - **The key is not found (`404`)**: the provider emits `Error` with "SDK key not found. Check SATEE_SDK_KEY." if no
