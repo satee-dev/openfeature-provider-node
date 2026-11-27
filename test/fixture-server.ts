@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 
-export const FIXTURE_SDK_KEY = "satee_server_fixture0001";
-export const FIXTURE_PATH_ID = "60e6e51f7ce47efdebc3e3b395108960";
+export const FIXTURE_SDK_KEY = "satee_server_Fx7Tz3Qm9Kw2Rb5Nc8Hd4Pj6";
+export const FIXTURE_PATH_ID = "e87ce875c863429f8b36180a6e0c3ab3";
 export const FIXTURE_PATH = `/v1/${FIXTURE_PATH_ID}/flags.json`;
 
 export const exampleFlags = readFileSync(new URL("./fixtures/flags.example.json", import.meta.url), "utf8");

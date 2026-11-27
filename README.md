@@ -40,7 +40,7 @@ Every Satee flag is boolean. Reading a flag is a lookup in memory and never wait
 
 The SDK key is for server code only. Never ship it in browser code: anyone who has it can read every flag.
 
-A missing key, or one without the `satee_server_` prefix or with nothing after it, throws from the constructor, and so
+A missing key, or one that is not `satee_server_` followed by the 24-character secret, throws from the constructor, and so
 does a browser key (`satee_client_`). That is the only time the provider throws: a wrong key is a deployment mistake,
 and it is best caught at start.
 

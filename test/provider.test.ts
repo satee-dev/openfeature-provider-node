@@ -17,14 +17,35 @@ import {
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 describe("constructor", () => {
-  for (const sdkKey of [undefined, "", "abcd1234", "satee_sdk_abcd1234", "satee_server_"]) {
+  for (const sdkKey of [
+    undefined,
+    "",
+    "abcd1234",
+    "satee_sdk_abcd1234",
+    "satee_server_",
+    "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd",
+    "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6x",
+    "satee_server_0Rq2mXv9KpL4nTz8WbY3cHd6",
+    "satee_server_ORq2mXv9KpL4nTz8WbY3cHd6",
+    "satee_server_IRq2mXv9KpL4nTz8WbY3cHd6",
+    "satee_server_lRq2mXv9KpL4nTz8WbY3cHd6",
+    null,
+    ["satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6"],
+    { toString: () => "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6" },
+    "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6\n",
+    "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6\r\n",
+    "satee_server_../other?x#9876abcdefghijk",
+  ]) {
     it(`rejects ${JSON.stringify(sdkKey)} with a message naming SATEE_SDK_KEY`, () => {
-      assert.throws(() => new SateeProvider({ sdkKey }), /SATEE_SDK_KEY.*satee_server_|satee_server_.*SATEE_SDK_KEY/);
+      assert.throws(
+        () => new SateeProvider({ sdkKey: sdkKey as string }),
+        /SATEE_SDK_KEY.*satee_server_|satee_server_.*SATEE_SDK_KEY/,
+      );
     });
   }
 
-  it("accepts any key with the prefix", () => {
-    assert.doesNotThrow(() => new SateeProvider({ sdkKey: "satee_server_anything-goes" }));
+  it("accepts the prefix followed by a 24-character base58 secret", () => {
+    assert.doesNotThrow(() => new SateeProvider({ sdkKey: "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6" }));
   });
 
   it("rejects a browser key with a message saying so", () => {
@@ -133,7 +154,7 @@ describe("a file it refuses to load", () => {
   });
 
   it("keeps the key out of the URL and the key and path id out of the log", async () => {
-    const sdkKey = "satee_server_../other?x#9876";
+    const sdkKey = "satee_server_Ab3dEf5gHj7kMn9pQr2s9876";
     const { logs, server } = await load(exampleFlags, sdkKey);
     const url = server.requests[0]?.url ?? "";
     const pathId = /^\/v1\/([0-9a-f]{32})\/flags\.json$/.exec(url)?.[1];

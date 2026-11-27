@@ -24,6 +24,7 @@ import { VERSION } from "./version.ts";
 
 const KEY_PREFIX = "satee_server_";
 const BROWSER_KEY_PREFIX = "satee_client_";
+const SECRET_FORMAT = /^[1-9A-HJ-NP-Za-km-z]{24}$/;
 const REQUEST_TIMEOUT_MS = 5000;
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -99,12 +100,16 @@ export class SateeProvider implements Provider {
 
   constructor(options: SateeProviderOptions) {
     const { sdkKey } = options;
-    if (sdkKey?.startsWith(BROWSER_KEY_PREFIX)) {
+    if (typeof sdkKey === "string" && sdkKey.startsWith(BROWSER_KEY_PREFIX)) {
       throw new Error("This is a browser key. Use the server key from the Setup page.");
     }
-    if (!sdkKey?.startsWith(KEY_PREFIX) || sdkKey.length === KEY_PREFIX.length) {
+    if (
+      typeof sdkKey !== "string" ||
+      !sdkKey.startsWith(KEY_PREFIX) ||
+      !SECRET_FORMAT.test(sdkKey.slice(KEY_PREFIX.length))
+    ) {
       throw new Error(
-        `Satee SDK key is missing or does not start with "${KEY_PREFIX}". Set SATEE_SDK_KEY to the key from the Setup page.`,
+        `Satee SDK key is missing or is not a server key ("${KEY_PREFIX}" followed by 24 characters). Set SATEE_SDK_KEY to the key from the Setup page.`,
       );
     }
     const baseUrl = (options.baseUrl ?? "https://flags.satee.dev").replace(/\/+$/, "");
