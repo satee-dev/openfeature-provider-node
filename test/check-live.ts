@@ -1,7 +1,7 @@
 import { OpenFeature } from "@openfeature/server-sdk";
-import { parseFlagFile, readBody } from "../src/flag-file.ts";
-import { flagFilePath } from "../src/flag-path.ts";
+import { flagFilePath, parseFlagFile, readBody } from "../src/flag-file.ts";
 import { SateeProvider } from "../src/index.ts";
+import { sha256Hex } from "../src/provider.ts";
 
 const PREFIX = "satee_server_";
 const sdkKey = process.env.SATEE_SDK_KEY;
@@ -23,7 +23,7 @@ function describe(error: unknown): string {
 
 let response: Response;
 try {
-  response = await fetch(`${baseUrl}${flagFilePath(secret)}`, {
+  response = await fetch(`${baseUrl}${await flagFilePath(secret, sha256Hex)}`, {
     signal: AbortSignal.timeout(10_000),
   });
 } catch (error) {

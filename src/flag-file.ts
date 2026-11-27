@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import { FlagdCore } from "@openfeature/flagd-core";
 import type { Logger } from "@openfeature/server-sdk";
 
@@ -16,27 +15,54 @@ export class FlagFileError extends Error {
   override name = "FlagFileError";
 }
 
+export type Sha256Hex = (text: string) => Promise<string>;
+
+// The URL carries a hash rather than the key, so the key stays out of access logs and bucket listings.
+export async function flagFilePath(secret: string, sha256Hex: Sha256Hex): Promise<string> {
+  const hash = await sha256Hex(`satee-flags-v1:${secret}`);
+  if (!/^[0-9a-f]{64}$/.test(hash)) throw new FlagFileError("hash is not SHA-256 hex");
+  const pathId = hash.slice(0, 32);
+  return `/v1/${pathId}/flags.json`;
+}
+
 export async function readBody(response: Response): Promise<string> {
   if (Number(response.headers.get("content-length")) > MAX_BODY_BYTES) {
     await response.body?.cancel();
     throw new FlagFileError("file is larger than 4 MiB");
   }
   if (!response.body) return "";
-  const chunks: Uint8Array[] = [];
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  let text = "";
   let size = 0;
-  for await (const chunk of response.body) {
-    size += chunk.byteLength;
-    if (size > MAX_BODY_BYTES) throw new FlagFileError("file is larger than 4 MiB");
-    chunks.push(chunk);
+  const reader = response.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel();
+      throw new FlagFileError("file is larger than 4 MiB");
+    }
+    text += decoder.decode(value, { stream: true });
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return text + decoder.decode();
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// Compares values as JSON.parse produces them, so key order does not matter.
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => jsonEqual(v, b[i]));
+  }
+  if (!isObject(a) || !isObject(b)) return Object.is(a, b);
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => Object.hasOwn(b, k) && jsonEqual(a[k], b[k]));
+}
+
 const hasTargeting = (flag: unknown) =>
-  isObject(flag) && Object.hasOwn(flag, "targeting") && !isDeepStrictEqual(flag.targeting, {});
+  isObject(flag) && Object.hasOwn(flag, "targeting") && !jsonEqual(flag.targeting, {});
 
 const isFlag = (flag: unknown): flag is Flag =>
   isObject(flag) &&
@@ -92,6 +118,6 @@ export function changedKeys(before: FlagSet["flags"], after: FlagSet["flags"]): 
   return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => {
     const was = Object.hasOwn(before, key) ? before[key] : undefined;
     const now = Object.hasOwn(after, key) ? after[key] : undefined;
-    return !isDeepStrictEqual(was, now);
+    return !jsonEqual(was, now);
   });
 }

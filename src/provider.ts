@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   ErrorCode,
@@ -10,8 +11,15 @@ import {
   type ResolutionDetails,
   StandardResolutionReasons,
 } from "@openfeature/server-sdk";
-import { changedKeys, FlagFileError, type FlagSet, parseFlagFile, readBody } from "./flag-file.ts";
-import { flagFilePath } from "./flag-path.ts";
+import {
+  changedKeys,
+  FlagFileError,
+  type FlagSet,
+  flagFilePath,
+  parseFlagFile,
+  readBody,
+  type Sha256Hex,
+} from "./flag-file.ts";
 import { VERSION } from "./version.ts";
 
 const KEY_PREFIX = "satee_server_";
@@ -60,6 +68,8 @@ type PollResult =
 
 type Episode = { kind: "error" | "stale"; message: string };
 
+export const sha256Hex: Sha256Hex = async (text) => createHash("sha256").update(text).digest("hex");
+
 // Never the message of other errors: fetch puts the whole URL, path id included, in some of them.
 function describeFailure(error: unknown): string {
   if (error instanceof FlagFileError) return error.message;
@@ -73,7 +83,7 @@ export class SateeProvider implements Provider {
   readonly runsOn = "server";
   readonly events = new OpenFeatureEventEmitter();
 
-  readonly #url: string;
+  readonly #url: Promise<string>;
   readonly #keyHint: string;
   readonly #logger: Logger;
   readonly #pollIntervalMs: number;
@@ -99,7 +109,9 @@ export class SateeProvider implements Provider {
     }
     const baseUrl = (options.baseUrl ?? "https://flags.satee.dev").replace(/\/+$/, "");
     const secret = sdkKey.slice(KEY_PREFIX.length);
-    this.#url = `${baseUrl}${flagFilePath(secret)}`;
+    this.#url = flagFilePath(secret, sha256Hex).then((path) => `${baseUrl}${path}`);
+    // The first poll reports a rejection; until then it must not reach Node as unhandled, with the key in it.
+    this.#url.catch(() => {});
     this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
     this.#logger = neverThrowing(options.logger ?? consoleLogger);
     this.#timing = { ...DEFAULT_TIMING, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };
@@ -203,7 +215,7 @@ export class SateeProvider implements Provider {
     if (this.#etag !== null) headers["If-None-Match"] = this.#etag;
     let etag: string | null = null;
     try {
-      const response = await fetch(this.#url, {
+      const response = await fetch(await this.#url, {
         headers,
         signal: AbortSignal.any([AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, timeoutMs)), signal]),
       });
