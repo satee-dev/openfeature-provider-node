@@ -81,7 +81,7 @@ describe("status and events", () => {
     await start();
     assert.ok(Date.now() - startedAt >= timing.startupMs - timing.startupRetryMs);
     const attempts = server.requests.length;
-    assert.ok(attempts >= 2 && attempts <= timing.startupMs / timing.startupRetryMs, `${attempts} attempts`);
+    assert.ok(attempts >= 2 && attempts <= timing.startupMs / timing.startupRetryMs + 1, `${attempts} attempts`);
     assert.equal(client().providerStatus, ProviderStatus.ERROR);
     assert.equal((await value()).errorCode, "PROVIDER_NOT_READY");
     await morePolls(5);

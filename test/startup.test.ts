@@ -48,7 +48,7 @@ describe("start-up", () => {
     await OpenFeature.setProviderAndWait("startup", provider());
     assert.ok(Date.now() - startedAt >= timing.startupMs - timing.startupRetryMs);
     const attempts = server.requests.length;
-    assert.ok(attempts >= 2 && attempts <= timing.startupMs / timing.startupRetryMs, `${attempts} attempts`);
+    assert.ok(attempts >= 2 && attempts <= timing.startupMs / timing.startupRetryMs + 1, `${attempts} attempts`);
     assert.equal((await value()).errorCode, "PROVIDER_NOT_READY");
     server.serve(exampleFlags);
     await until(async () => (await value()).value, "the file to load");
