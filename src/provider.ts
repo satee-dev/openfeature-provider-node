@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   ErrorCode,
   type EvaluationContext,
@@ -23,9 +24,10 @@ export type SateeProviderOptions = {
   logger?: Logger;
 };
 
-/** Lets tests poll faster than the public floor. */
+/** Lets tests shorten the waits that the public options do not expose. */
 export const testTiming: unique symbol = Symbol("satee.testTiming");
-type Timing = { minPollMs: number };
+type Timing = { minPollMs: number; startupMs: number; startupRetryMs: number };
+const DEFAULT_TIMING: Timing = { minPollMs: 1000, startupMs: 5000, startupRetryMs: 1000 };
 
 const consoleLogger: Logger = {
   debug: () => {},
@@ -52,6 +54,7 @@ export class SateeProvider implements Provider {
   readonly #keyHint: string;
   readonly #logger: Logger;
   readonly #pollIntervalMs: number;
+  readonly #timing: Timing;
   #closed = new AbortController();
   #held: FlagSet | undefined;
   #etag: string | null = null;
@@ -69,17 +72,27 @@ export class SateeProvider implements Provider {
     this.#url = `${baseUrl}/${encodeURIComponent(secret)}/flags.json`;
     this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
     this.#logger = options.logger ?? consoleLogger;
-    const timing: Timing = { minPollMs: 1000, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };
+    this.#timing = { ...DEFAULT_TIMING, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };
     const requested = options.pollIntervalMs;
     const interval = requested !== undefined && Number.isFinite(requested) ? requested : 5000;
-    this.#pollIntervalMs = Math.min(MAX_TIMER_MS, Math.max(timing.minPollMs, interval));
+    this.#pollIntervalMs = Math.min(MAX_TIMER_MS, Math.max(this.#timing.minPollMs, interval));
   }
 
   async initialize(): Promise<void> {
     this.#closed = new AbortController();
     const { signal } = this.#closed;
-    const result = await this.#poll(signal);
-    if (!result.ok && !signal.aborted) {
+    const deadline = Date.now() + this.#timing.startupMs;
+    let result: PollResult;
+    for (;;) {
+      const attemptAt = Date.now();
+      result = await this.#poll(signal, Math.max(1, deadline - attemptAt));
+      if (signal.aborted) return;
+      const retryAt = Math.max(Date.now(), attemptAt + this.#timing.startupRetryMs);
+      if (result.ok || retryAt >= deadline) break;
+      await sleep(Math.max(0, retryAt - Date.now()), undefined, { signal }).catch(() => {});
+      if (signal.aborted) return;
+    }
+    if (!result.ok) {
       this.#logger.warn(`Satee: could not load flags for ${this.#keyHint} (${result.reason})`);
     }
     this.#scheduleNextPoll(signal);
@@ -109,13 +122,13 @@ export class SateeProvider implements Provider {
     }, this.#pollIntervalMs).unref();
   }
 
-  async #poll(signal: AbortSignal): Promise<PollResult> {
+  async #poll(signal: AbortSignal, timeoutMs = REQUEST_TIMEOUT_MS): Promise<PollResult> {
     const headers: Record<string, string> = { "User-Agent": `satee-openfeature-node/${VERSION}` };
     if (this.#etag !== null) headers["If-None-Match"] = this.#etag;
     try {
       const response = await fetch(this.#url, {
         headers,
-        signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal]),
+        signal: AbortSignal.any([AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, timeoutMs)), signal]),
       });
       const etag = response.headers.get("etag");
       if (response.status === 304 || (response.status === 200 && etag !== null && etag === this.#etag)) {

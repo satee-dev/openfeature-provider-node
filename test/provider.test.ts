@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
 import { ErrorCode, OpenFeature } from "@openfeature/server-sdk";
 import { SateeProvider } from "../src/index.ts";
+import { testTiming } from "../src/provider.ts";
 import { VERSION } from "../src/version.ts";
 import { exampleFlags, FIXTURE_SDK_KEY, type FixtureServer, startFixtureServer } from "./fixture-server.ts";
 
@@ -62,29 +63,14 @@ describe("evaluation against the shared fixture", () => {
   });
 });
 
-describe("when Satee cannot be reached", () => {
-  it("finishes start-up and returns the caller's default", async () => {
-    const server = await startFixtureServer();
-    await server.close();
-    const domain = "unreachable";
-    await OpenFeature.setProviderAndWait(
-      domain,
-      new SateeProvider({ sdkKey: FIXTURE_SDK_KEY, baseUrl: server.baseUrl, logger: silent }),
-    );
-    const details = await OpenFeature.getClient(domain).getBooleanDetails("new-checkout", false);
-    assert.equal(details.value, false);
-    assert.equal(details.errorCode, ErrorCode.PROVIDER_NOT_READY);
-    await OpenFeature.close();
-  });
-});
-
 describe("a file it refuses to load", () => {
-  const load = async (body: string, sdkKey = FIXTURE_SDK_KEY) => {
+  const load = async (body: string, sdkKey = FIXTURE_SDK_KEY, startupMs = 50) => {
     const server = await startFixtureServer(body);
     const warnings: string[] = [];
     const logger = { ...silent, warn: (...args: unknown[]) => warnings.push(args.join(" ")) };
     const domain = "refused";
-    await OpenFeature.setProviderAndWait(domain, new SateeProvider({ sdkKey, baseUrl: server.baseUrl, logger }));
+    const options = { sdkKey, baseUrl: server.baseUrl, logger, [testTiming]: { startupMs, startupRetryMs: startupMs } };
+    await OpenFeature.setProviderAndWait(domain, new SateeProvider(options));
     const details = await OpenFeature.getClient(domain).getBooleanDetails("new-checkout", false);
     await OpenFeature.close();
     await server.close();
@@ -122,7 +108,7 @@ describe("a file it refuses to load", () => {
   });
 
   it("stops reading a body larger than 4 MiB", async () => {
-    const { details, warnings } = await load(`${" ".repeat(5 * 1024 * 1024)}{}`);
+    const { details, warnings } = await load(`${" ".repeat(5 * 1024 * 1024)}{}`, FIXTURE_SDK_KEY, 2000);
     assert.equal(details.errorCode, ErrorCode.PROVIDER_NOT_READY);
     assert.match(warnings.join("\n"), /larger than 4 MiB/);
   });

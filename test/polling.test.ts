@@ -30,7 +30,7 @@ describe("polling", () => {
       baseUrl: server.baseUrl,
       pollIntervalMs: POLL_MS,
       logger: silent,
-      [testTiming]: { minPollMs: POLL_MS },
+      [testTiming]: { minPollMs: POLL_MS, startupMs: 100, startupRetryMs: 20 },
       ...options,
     } as ConstructorParameters<typeof SateeProvider>[0]);
     await OpenFeature.setProviderAndWait("polling", provider);
