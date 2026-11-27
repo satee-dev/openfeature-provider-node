@@ -48,6 +48,10 @@ describe("constructor", () => {
     assert.doesNotThrow(() => new SateeProvider({ sdkKey: "satee_server_7Rq2mXv9KpL4nTz8WbY3cHd6" }));
   });
 
+  it("rejects a missing options object with a message naming SATEE_SDK_KEY", () => {
+    assert.throws(() => new SateeProvider(undefined as never), /SATEE_SDK_KEY/);
+  });
+
   it("rejects a browser key with a message saying so", () => {
     assert.throws(
       () => new SateeProvider({ sdkKey: "satee_client_7Rq2mXv9KpL4nTz8WbY3cHd6" }),

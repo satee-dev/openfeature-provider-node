@@ -99,7 +99,7 @@ export class SateeProvider implements Provider {
   #episode: Episode | undefined;
 
   constructor(options: SateeProviderOptions) {
-    const { sdkKey } = options;
+    const sdkKey = options?.sdkKey;
     if (typeof sdkKey === "string" && sdkKey.startsWith(BROWSER_KEY_PREFIX)) {
       throw new Error("This is a browser key. Use the server key from the Setup page.");
     }
