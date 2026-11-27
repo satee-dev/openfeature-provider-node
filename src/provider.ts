@@ -26,8 +26,22 @@ export type SateeProviderOptions = {
 
 /** Lets tests shorten the waits that the public options do not expose. */
 export const testTiming: unique symbol = Symbol("satee.testTiming");
-type Timing = { minPollMs: number; startupMs: number; startupRetryMs: number };
-const DEFAULT_TIMING: Timing = { minPollMs: 1000, startupMs: 5000, startupRetryMs: 1000 };
+type Timing = {
+  minPollMs: number;
+  startupMs: number;
+  startupRetryMs: number;
+  staleAfterMs: number;
+  refusedPollMs: number;
+};
+const DEFAULT_TIMING: Timing = {
+  minPollMs: 1000,
+  startupMs: 5000,
+  startupRetryMs: 1000,
+  staleAfterMs: 60_000,
+  refusedPollMs: 60_000,
+};
+
+const REFUSED_MESSAGE = "Request refused (403). Check SATEE_SDK_KEY and the base URL.";
 
 const consoleLogger: Logger = {
   debug: () => {},
@@ -36,7 +50,13 @@ const consoleLogger: Logger = {
   error: (...args) => console.error(...args),
 };
 
-type PollResult = { ok: true; changed: string[] } | { ok: false; reason: string };
+type PollResult =
+  | { kind: "loaded"; changed: string[] }
+  | { kind: "unchanged" }
+  | { kind: "refused"; status: 403 | 404 }
+  | { kind: "failed"; reason: string; ignoredFile?: boolean };
+
+type Episode = { kind: "error" | "stale"; message: string };
 
 function describeFailure(error: unknown): string {
   if (error instanceof FlagFileError) return error.message;
@@ -58,7 +78,11 @@ export class SateeProvider implements Provider {
   #closed = new AbortController();
   #held: FlagSet | undefined;
   #etag: string | null = null;
+  #rejected: string | undefined;
   #timer: NodeJS.Timeout | undefined;
+  #lastSuccessAt = 0;
+  #refused = false;
+  #episode: Episode | undefined;
 
   constructor(options: SateeProviderOptions) {
     const { sdkKey } = options;
@@ -71,7 +95,7 @@ export class SateeProvider implements Provider {
     const secret = sdkKey.slice(KEY_PREFIX.length);
     this.#url = `${baseUrl}/${encodeURIComponent(secret)}/flags.json`;
     this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
-    this.#logger = options.logger ?? consoleLogger;
+    this.#logger = neverThrowing(options.logger ?? consoleLogger);
     this.#timing = { ...DEFAULT_TIMING, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };
     const requested = options.pollIntervalMs;
     const interval = requested !== undefined && Number.isFinite(requested) ? requested : 5000;
@@ -81,6 +105,8 @@ export class SateeProvider implements Provider {
   async initialize(): Promise<void> {
     this.#closed = new AbortController();
     const { signal } = this.#closed;
+    this.#episode = undefined;
+    this.#refused = false;
     const deadline = Date.now() + this.#timing.startupMs;
     let result: PollResult;
     for (;;) {
@@ -88,14 +114,12 @@ export class SateeProvider implements Provider {
       result = await this.#poll(signal, Math.max(1, deadline - attemptAt));
       if (signal.aborted) return;
       const retryAt = Math.max(Date.now(), attemptAt + this.#timing.startupRetryMs);
-      if (result.ok || retryAt >= deadline) break;
+      if (result.kind !== "failed" || retryAt >= deadline) break;
       await sleep(Math.max(0, retryAt - Date.now()), undefined, { signal }).catch(() => {});
       if (signal.aborted) return;
     }
-    if (!result.ok) {
-      this.#logger.warn(`Satee: could not load flags for ${this.#keyHint} (${result.reason})`);
-    }
-    this.#scheduleNextPoll(signal);
+    // The SDK marks the provider ready once this resolves, so a start-up Error must come after that.
+    setImmediate(() => this.#settle(result, signal, true));
   }
 
   async onClose(): Promise<void> {
@@ -106,47 +130,99 @@ export class SateeProvider implements Provider {
   // Each start owns its signal, so a poll that outlives a close cannot revive polling after a restart.
   #scheduleNextPoll(signal: AbortSignal): void {
     if (signal.aborted) return;
+    const delay = this.#refused ? Math.max(this.#pollIntervalMs, this.#timing.refusedPollMs) : this.#pollIntervalMs;
     this.#timer = setTimeout(async () => {
-      try {
-        const result = await this.#poll(signal);
-        if (signal.aborted) return;
-        if (result.ok && result.changed.length > 0) {
-          this.events.emit(ProviderEvents.ConfigurationChanged, { flagsChanged: result.changed });
-        }
-        if (!result.ok) this.#logger.debug(`Satee: poll failed for ${this.#keyHint} (${result.reason})`);
-      } catch {
-        // A throwing logger must not stop polling.
-      } finally {
-        this.#scheduleNextPoll(signal);
+      this.#settle(await this.#poll(signal), signal, false);
+    }, delay).unref();
+  }
+
+  #settle(result: PollResult, signal: AbortSignal, atStartup: boolean): void {
+    if (signal.aborted) return;
+    try {
+      this.#report(result, atStartup);
+    } catch {
+      // A throwing logger or event handler must not stop polling.
+    } finally {
+      this.#scheduleNextPoll(signal);
+    }
+  }
+
+  #report(result: PollResult, atStartup: boolean): void {
+    if (result.kind === "loaded" || result.kind === "unchanged") {
+      this.#lastSuccessAt = Date.now();
+      this.#refused = false;
+      if (this.#episode) {
+        this.#episode = undefined;
+        this.#logger.info(`Satee: flags for ${this.#keyHint} are loading again`);
+        this.events.emit(ProviderEvents.Ready);
       }
-    }, this.#pollIntervalMs).unref();
+      if (result.kind === "loaded" && !atStartup && result.changed.length > 0) {
+        this.events.emit(ProviderEvents.ConfigurationChanged, { flagsChanged: result.changed });
+      }
+      return;
+    }
+    if (result.kind === "refused") {
+      this.#refused = true;
+      if (result.status === 403) this.#begin("error", REFUSED_MESSAGE);
+      else this.#begin("error", this.#held ? "SDK key no longer valid" : "SDK key not found. Check SATEE_SDK_KEY.");
+      return;
+    }
+    if (result.ignoredFile) this.#logger.warn(`Satee: ignored a flag file for ${this.#keyHint} (${result.reason})`);
+    else this.#logger.debug(`Satee: poll failed for ${this.#keyHint} (${result.reason})`);
+    if (!this.#held) {
+      if (atStartup) this.#begin("error", "Could not load flags yet", result.reason);
+    } else if (Date.now() - this.#lastSuccessAt >= this.#timing.staleAfterMs) {
+      this.#begin("stale", "Could not refresh flags; serving the last good values", result.reason);
+    }
+  }
+
+  // An episode runs from the first failure to the next successful poll. A problem is not reported again while it
+  // persists, and Stale never replaces an Error.
+  #begin(kind: Episode["kind"], message: string, reason?: string): void {
+    const current = this.#episode;
+    if (current && (kind === "stale" || current.message === message)) return;
+    this.#episode = { kind, message };
+    const line = `Satee: ${message} (${this.#keyHint}${reason ? `, ${reason}` : ""})`;
+    if (kind === "error") {
+      this.#logger.error(line);
+      this.events.emit(ProviderEvents.Error, { message });
+    } else {
+      this.#logger.warn(line);
+      this.events.emit(ProviderEvents.Stale, { message });
+    }
   }
 
   async #poll(signal: AbortSignal, timeoutMs = REQUEST_TIMEOUT_MS): Promise<PollResult> {
     const headers: Record<string, string> = { "User-Agent": `satee-openfeature-node/${VERSION}` };
     if (this.#etag !== null) headers["If-None-Match"] = this.#etag;
+    let etag: string | null = null;
     try {
       const response = await fetch(this.#url, {
         headers,
         signal: AbortSignal.any([AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, timeoutMs)), signal]),
       });
-      const etag = response.headers.get("etag");
+      etag = response.headers.get("etag");
       if (response.status === 304 || (response.status === 200 && etag !== null && etag === this.#etag)) {
         await response.body?.cancel();
-        return { ok: true, changed: [] };
+        return { kind: "unchanged" };
       }
       if (response.status !== 200) {
         await response.body?.cancel();
-        return { ok: false, reason: `HTTP ${response.status}` };
+        if (response.status === 403 || response.status === 404) return { kind: "refused", status: response.status };
+        return { kind: "failed", reason: `HTTP ${response.status}` };
       }
       const next = parseFlagFile(await readBody(response), this.#held?.revision, this.#logger);
-      if (signal.aborted) return { ok: false, reason: "closed" };
+      if (signal.aborted) return { kind: "failed", reason: "closed" };
       const changed = changedKeys(this.#held?.flags ?? {}, next.flags);
       this.#held = next;
       this.#etag = etag;
-      return { ok: true, changed };
+      this.#rejected = undefined;
+      return { kind: "loaded", changed };
     } catch (error) {
-      return { ok: false, reason: describeFailure(error) };
+      const reason = describeFailure(error);
+      const ignoredFile = error instanceof FlagFileError && this.#rejected !== (etag ?? reason);
+      if (ignoredFile) this.#rejected = etag ?? reason;
+      return { kind: "failed", reason, ignoredFile };
     }
   }
 
@@ -183,4 +259,21 @@ export class SateeProvider implements Provider {
     }
     return evaluate(held.evaluator);
   }
+}
+
+// A logger that throws must not cost the event that follows its line, so each call is contained.
+function neverThrowing(logger: Logger): Logger {
+  const contain =
+    (write: (...args: unknown[]) => void) =>
+    (...args: unknown[]) => {
+      try {
+        write.apply(logger, args);
+      } catch {}
+    };
+  return {
+    debug: contain(logger.debug),
+    info: contain(logger.info),
+    warn: contain(logger.warn),
+    error: contain(logger.error),
+  };
 }

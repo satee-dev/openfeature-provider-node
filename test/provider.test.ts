@@ -66,37 +66,42 @@ describe("evaluation against the shared fixture", () => {
 describe("a file it refuses to load", () => {
   const load = async (body: string, sdkKey = FIXTURE_SDK_KEY, startupMs = 50) => {
     const server = await startFixtureServer(body);
-    const warnings: string[] = [];
-    const logger = { ...silent, warn: (...args: unknown[]) => warnings.push(args.join(" ")) };
+    const logs: string[] = [];
+    const record =
+      (level: string) =>
+      (...args: unknown[]) =>
+        logs.push(`${level}: ${args.join(" ")}`);
+    const logger = { debug: record("debug"), info: record("info"), warn: record("warn"), error: record("error") };
     const domain = "refused";
     const options = { sdkKey, baseUrl: server.baseUrl, logger, [testTiming]: { startupMs, startupRetryMs: startupMs } };
     await OpenFeature.setProviderAndWait(domain, new SateeProvider(options));
+    await new Promise((resolve) => setImmediate(resolve));
     const details = await OpenFeature.getClient(domain).getBooleanDetails("new-checkout", false);
     await OpenFeature.close();
     await server.close();
-    return { details, warnings, server };
+    return { details, logs, server };
   };
 
   it("never hands $evaluators to the evaluator", async () => {
     const withEvaluators = JSON.stringify({ ...JSON.parse(exampleFlags), $evaluators: { e: { "==": [1, 1] } } });
-    const { details, warnings } = await load(withEvaluators);
+    const { details, logs } = await load(withEvaluators);
     assert.equal(details.errorCode, ErrorCode.PROVIDER_NOT_READY);
-    assert.match(warnings.join("\n"), /not a Satee flag file/);
+    assert.match(logs.join("\n"), /^warn: .*not a Satee flag file/m);
   });
 
   it("never hands targeting to the evaluator", async () => {
     const file = JSON.parse(exampleFlags);
     file.flags["new-checkout"].targeting = { if: [true, "on", "off"] };
-    const { details, warnings } = await load(JSON.stringify(file));
+    const { details, logs } = await load(JSON.stringify(file));
     assert.equal(details.errorCode, ErrorCode.PROVIDER_NOT_READY);
-    assert.match(warnings.join("\n"), /carries targeting rules/);
+    assert.match(logs.join("\n"), /^warn: .*carries targeting rules/m);
   });
 
   it("refuses flags that are not an object", async () => {
     const flag = { state: "ENABLED", variants: { on: true, off: false }, defaultVariant: "on" };
-    const { details, warnings } = await load(JSON.stringify({ flags: [flag] }));
+    const { details, logs } = await load(JSON.stringify({ flags: [flag] }));
     assert.equal(details.errorCode, ErrorCode.PROVIDER_NOT_READY);
-    assert.match(warnings.join("\n"), /not a Satee flag file/);
+    assert.match(logs.join("\n"), /^warn: .*not a Satee flag file/m);
   });
 
   it("drops targeting hidden behind a flag's __proto__", async () => {
@@ -108,17 +113,17 @@ describe("a file it refuses to load", () => {
   });
 
   it("stops reading a body larger than 4 MiB", async () => {
-    const { details, warnings } = await load(`${" ".repeat(5 * 1024 * 1024)}{}`, FIXTURE_SDK_KEY, 2000);
+    const { details, logs } = await load(`${" ".repeat(5 * 1024 * 1024)}{}`, FIXTURE_SDK_KEY, 2000);
     assert.equal(details.errorCode, ErrorCode.PROVIDER_NOT_READY);
-    assert.match(warnings.join("\n"), /larger than 4 MiB/);
+    assert.match(logs.join("\n"), /^warn: .*larger than 4 MiB/m);
   });
 
   it("keeps the key to one path segment and out of the log", async () => {
     const sdkKey = "satee_sdk_../other?x#9876";
-    const { warnings, server } = await load(exampleFlags, sdkKey);
+    const { logs, server } = await load(exampleFlags, sdkKey);
     assert.equal(server.requests[0]?.url, "/..%2Fother%3Fx%239876/flags.json");
-    assert.match(warnings.join("\n"), /key ending 9876 \(HTTP 404\)/);
-    for (const line of warnings) {
+    assert.match(logs.join("\n"), /^error: .*SDK key not found\. Check SATEE_SDK_KEY\. \(key ending 9876\)/m);
+    for (const line of logs) {
       assert.ok(!line.includes(sdkKey.slice("satee_sdk_".length)) && !line.includes(server.baseUrl));
     }
   });
