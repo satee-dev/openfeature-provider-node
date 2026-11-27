@@ -18,8 +18,15 @@ const byVersion = (a: string, b: string) => {
   return (x ?? []).reduce((order, part, i) => order || part - (y?.[i] ?? 0), 0);
 };
 const inRange: string[] = [JSON.parse(stdout)].flat().sort(byVersion);
-const sdkVersions = [...new Set([inRange[0], inRange.at(-1)])];
-if (sdkVersions.length === 1) console.log(`${peerRange} allows only @openfeature/server-sdk ${sdkVersions[0]}`);
+// Every install is held back a week, so a compromised publish is likely caught before it runs here.
+const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+const published = JSON.parse((await npm(["view", "@openfeature/server-sdk", "time", "--json"], ".")).stdout);
+const lowest = inRange[0];
+if (lowest === undefined) throw new Error(`No @openfeature/server-sdk release matches ${peerRange}`);
+if (new Date(published[lowest]) > cutoff) throw new Error(`@openfeature/server-sdk ${lowest} is less than a week old`);
+const newestPastCutoff = inRange.filter((v) => new Date(published[v]) <= cutoff).at(-1) ?? lowest;
+const sdkVersions = [...new Set([lowest, newestPastCutoff])];
+if (sdkVersions.length === 1) console.log(`${peerRange} has no release newer than ${lowest} that is a week old`);
 
 const work = await mkdtemp(join(tmpdir(), "satee-consumers-"));
 try {
@@ -31,8 +38,10 @@ try {
         const setup = `server-sdk ${sdk} and TypeScript ${typescript}`;
         const dir = join(work, `${fixture}-${sdk}-${typescript}`);
         await cp(join("test/consumers", fixture), dir, { recursive: true });
-        const deps = [tarball, `@openfeature/server-sdk@${sdk}`, `typescript@${typescript}`, typesNode];
-        await npm(["install", "--ignore-scripts", "--no-audit", "--no-fund", ...deps], dir);
+        const install = ["install", "--ignore-scripts", "--no-audit", "--no-fund"];
+        await npm([...install, `--before=${cutoff.toISOString()}`, tarball, `@openfeature/server-sdk@${sdk}`], dir);
+        // Exact pins this repo already vets would fall foul of the cutoff, so they go in after it.
+        await npm([...install, `typescript@${typescript}`, typesNode], dir);
         await npm(["exec", "--no", "--", "tsc", "-p", "."], dir).catch((error) => {
           throw new Error(`tsc failed for the ${fixture} consumer with ${setup}:\n${error.stdout}${error.stderr}`, {
             cause: error,
