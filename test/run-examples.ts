@@ -5,9 +5,14 @@ import { exampleFlags, FIXTURE_SDK_KEY, payloads, startFixtureServer } from "./f
 
 const server = await startFixtureServer();
 const running = new Set<ChildProcess>();
+// The quickstart leaves baseUrl at its default, as a reader would, so this preload sends its requests to the fixture server.
+const toFixtureServer = `const fetch = globalThis.fetch; globalThis.fetch = (url, init) => {
+  const { pathname, search } = new URL(url);
+  return fetch(new URL(pathname + search, process.env.SATEE_BASE_URL), init);
+};`;
 
-function run(example: string, env: Record<string, string> = {}) {
-  const child = spawn(process.execPath, [`examples/${example}`], {
+function run(example: string, env: Record<string, string> = {}, nodeArgs: string[] = []) {
+  const child = spawn(process.execPath, [...nodeArgs, `examples/${example}`], {
     env: { ...process.env, SATEE_SDK_KEY: FIXTURE_SDK_KEY, SATEE_BASE_URL: server.baseUrl, ...env },
   });
   running.add(child);
@@ -27,7 +32,10 @@ function run(example: string, env: Record<string, string> = {}) {
 }
 
 try {
-  const quickstart = run("quickstart.js");
+  const quickstart = run("quickstart.js", {}, [
+    "--import",
+    `data:text/javascript,${encodeURIComponent(toFixtureServer)}`,
+  ]);
   await quickstart.waitFor(/new-checkout: true\n[\s\S]*new-checkout: true\n/);
   quickstart.child.kill();
 
