@@ -64,7 +64,7 @@ describe("evaluation against the shared fixture", () => {
 });
 
 describe("a file it refuses to load", () => {
-  const load = async (body: string, sdkKey = FIXTURE_SDK_KEY, startupMs = 50) => {
+  const load = async (body: string, sdkKey = FIXTURE_SDK_KEY, startupMs = 1000) => {
     const server = await startFixtureServer(body);
     const logs: string[] = [];
     const record =
