@@ -58,7 +58,7 @@ describe("evaluation against the shared fixture", () => {
 
   it("requests the key's file with a User-Agent naming the provider", () => {
     const [request] = server.requests;
-    assert.equal(request?.url, "/fixture0001/flags.json");
+    assert.equal(request?.url, "/v1/fixture0001/flags.json");
     assert.equal(request?.headers["user-agent"], `satee-openfeature-node/${VERSION}`);
   });
 });
@@ -121,7 +121,7 @@ describe("a file it refuses to load", () => {
   it("keeps the key to one path segment and out of the log", async () => {
     const sdkKey = "satee_sdk_../other?x#9876";
     const { logs, server } = await load(exampleFlags, sdkKey);
-    assert.equal(server.requests[0]?.url, "/..%2Fother%3Fx%239876/flags.json");
+    assert.equal(server.requests[0]?.url, "/v1/..%2Fother%3Fx%239876/flags.json");
     assert.match(logs.join("\n"), /^error: .*SDK key not found\. Check SATEE_SDK_KEY\. \(key ending 9876\)/m);
     for (const line of logs) {
       assert.ok(!line.includes(sdkKey.slice("satee_sdk_".length)) && !line.includes(server.baseUrl));

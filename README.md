@@ -90,10 +90,11 @@ Node 22.12 or later. The package is ESM only, and CommonJS can load it with `req
 ## Reading the file directly
 
 The provider reads one JSON file per key, in the [flagd](https://flagd.dev) flag format, without targeting rules. The
-URL uses the key without its `satee_sdk_` prefix. To see what your app gets:
+URL uses the key without its `satee_sdk_` prefix, under `/v1/`, the version of the file format. To see what your
+app gets:
 
 ```sh
-curl https://flags.satee.dev/YOUR_KEY_WITHOUT_PREFIX/flags.json
+curl https://flags.satee.dev/v1/YOUR_KEY_WITHOUT_PREFIX/flags.json
 ```
 
 ## Development

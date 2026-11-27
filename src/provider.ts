@@ -93,7 +93,7 @@ export class SateeProvider implements Provider {
     }
     const baseUrl = (options.baseUrl ?? "https://flags.satee.dev").replace(/\/+$/, "");
     const secret = sdkKey.slice(KEY_PREFIX.length);
-    this.#url = `${baseUrl}/${encodeURIComponent(secret)}/flags.json`;
+    this.#url = `${baseUrl}/v1/${encodeURIComponent(secret)}/flags.json`;
     this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
     this.#logger = neverThrowing(options.logger ?? consoleLogger);
     this.#timing = { ...DEFAULT_TIMING, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };

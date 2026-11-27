@@ -36,7 +36,8 @@ describe("polling", () => {
     await OpenFeature.setProviderAndWait("polling", provider);
     return provider;
   };
-  const currentEtag = async () => (await fetch(`${server.baseUrl}/fixture0001/flags.json`)).headers.get("etag") ?? "";
+  const currentEtag = async () =>
+    (await fetch(`${server.baseUrl}/v1/fixture0001/flags.json`)).headers.get("etag") ?? "";
   const pollsAfter = async (count: number) => {
     const target = server.requests.length + count;
     await until(() => server.requests.length >= target, `${count} more polls`);

@@ -72,7 +72,7 @@ export async function startFixtureServer(
     res.on("close", () => {
       recorded.abandoned = !res.writableFinished;
     });
-    const match = /^\/([^/?]+)\/flags\.json$/.exec(req.url ?? "");
+    const match = /^\/v1\/([^/?]+)\/flags\.json$/.exec(req.url ?? "");
     if (!match) {
       res.writeHead(403).end();
       return;

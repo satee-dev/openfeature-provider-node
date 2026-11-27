@@ -22,7 +22,7 @@ function describe(error: unknown): string {
 
 let response: Response;
 try {
-  response = await fetch(`${baseUrl}/${encodeURIComponent(secret)}/flags.json`, {
+  response = await fetch(`${baseUrl}/v1/${encodeURIComponent(secret)}/flags.json`, {
     signal: AbortSignal.timeout(10_000),
   });
 } catch (error) {
