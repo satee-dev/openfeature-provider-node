@@ -3,7 +3,7 @@ import { parseFlagFile, readBody } from "../src/flag-file.ts";
 import { flagFilePath } from "../src/flag-path.ts";
 import { SateeProvider } from "../src/index.ts";
 
-const PREFIX = "satee_sdk_";
+const PREFIX = "satee_server_";
 const sdkKey = process.env.SATEE_SDK_KEY;
 const baseUrl = process.env.SATEE_BASE_URL ?? "https://flags-test.satee.dev";
 if (!sdkKey?.startsWith(PREFIX)) fail("Set SATEE_SDK_KEY to a key for the test host.");

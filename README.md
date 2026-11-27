@@ -31,15 +31,18 @@ Every Satee flag is boolean. Reading a flag is a lookup in memory and never wait
 
 ## Options
 
-| Option           | Default                          | Meaning                                                      |
-| ---------------- | -------------------------------- | ------------------------------------------------------------ |
-| `sdkKey`         | required                         | the key from the Setup page, with its `satee_sdk_` prefix    |
-| `pollIntervalMs` | `5000`                           | time between polls; values below `1000` are raised to `1000` |
-| `baseUrl`        | `https://flags.satee.dev`        | another host: a local server in tests, or the test host      |
-| `logger`         | warnings and errors to `console` | an object with `debug`, `info`, `warn` and `error`           |
+| Option           | Default                          | Meaning                                                             |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------- |
+| `sdkKey`         | required                         | the server key from the Setup page, with its `satee_server_` prefix |
+| `pollIntervalMs` | `5000`                           | time between polls; values below `1000` are raised to `1000`        |
+| `baseUrl`        | `https://flags.satee.dev`        | another host: a local server in tests, or the test host             |
+| `logger`         | warnings and errors to `console` | an object with `debug`, `info`, `warn` and `error`                  |
 
-A missing key, or one without the `satee_sdk_` prefix or with nothing after it, throws from the constructor. That is
-the only time the provider throws: a missing key is a deployment mistake, and it is best caught at start.
+The SDK key is for server code only. Never ship it in browser code: anyone who has it can read every flag.
+
+A missing key, or one without the `satee_server_` prefix or with nothing after it, throws from the constructor, and so
+does a browser key (`satee_client_`). That is the only time the provider throws: a wrong key is a deployment mistake,
+and it is best caught at start.
 
 ## How it behaves
 
@@ -91,11 +94,11 @@ Node 22.12 or later. The package is ESM only, and CommonJS can load it with `req
 
 The provider reads one JSON file per key, in the [flagd](https://flagd.dev) flag format, without targeting rules. The
 URL holds a hash of the key, never the key itself: the first 32 hex characters of the SHA-256 of `satee-flags-v1:`
-followed by the key without its `satee_sdk_` prefix. `/v1/` is the version of the file format. To see what your app
+followed by the key without its `satee_server_` prefix. `/v1/` is the version of the file format. To see what your app
 gets:
 
 ```sh
-KEY="${SATEE_SDK_KEY#satee_sdk_}"
+KEY="${SATEE_SDK_KEY#satee_server_}"
 curl "https://flags.satee.dev/v1/$(printf 'satee-flags-v1:%s' "$KEY" | shasum -a 256 | cut -c1-32)/flags.json"
 ```
 

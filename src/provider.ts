@@ -14,7 +14,8 @@ import { changedKeys, FlagFileError, type FlagSet, parseFlagFile, readBody } fro
 import { flagFilePath } from "./flag-path.ts";
 import { VERSION } from "./version.ts";
 
-const KEY_PREFIX = "satee_sdk_";
+const KEY_PREFIX = "satee_server_";
+const BROWSER_KEY_PREFIX = "satee_client_";
 const REQUEST_TIMEOUT_MS = 5000;
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -88,6 +89,9 @@ export class SateeProvider implements Provider {
 
   constructor(options: SateeProviderOptions) {
     const { sdkKey } = options;
+    if (sdkKey?.startsWith(BROWSER_KEY_PREFIX)) {
+      throw new Error("This is a browser key. Use the server key from the Setup page.");
+    }
     if (!sdkKey?.startsWith(KEY_PREFIX) || sdkKey.length === KEY_PREFIX.length) {
       throw new Error(
         `Satee SDK key is missing or does not start with "${KEY_PREFIX}". Set SATEE_SDK_KEY to the key from the Setup page.`,

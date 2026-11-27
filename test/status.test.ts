@@ -75,7 +75,7 @@ describe("status and events", () => {
     for (const [type, handler] of handlers) client().removeHandler(type, handler);
     await OpenFeature.clearProviders();
     await server.close();
-    const secret = FIXTURE_SDK_KEY.slice("satee_sdk_".length);
+    const secret = FIXTURE_SDK_KEY.slice("satee_server_".length);
     for (const line of [...logs, ...events]) {
       const leaked = [secret, FIXTURE_PATH_ID, server.baseUrl].some((leak) => line.includes(leak));
       assert.ok(!leaked, `leaks the key, path id or URL: ${line}`);

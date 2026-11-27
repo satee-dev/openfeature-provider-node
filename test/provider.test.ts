@@ -17,14 +17,21 @@ import {
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 describe("constructor", () => {
-  for (const sdkKey of [undefined, "", "abcd1234", "satee_sdk_"]) {
+  for (const sdkKey of [undefined, "", "abcd1234", "satee_sdk_abcd1234", "satee_server_"]) {
     it(`rejects ${JSON.stringify(sdkKey)} with a message naming SATEE_SDK_KEY`, () => {
-      assert.throws(() => new SateeProvider({ sdkKey }), /SATEE_SDK_KEY/);
+      assert.throws(() => new SateeProvider({ sdkKey }), /SATEE_SDK_KEY.*satee_server_|satee_server_.*SATEE_SDK_KEY/);
     });
   }
 
   it("accepts any key with the prefix", () => {
-    assert.doesNotThrow(() => new SateeProvider({ sdkKey: "satee_sdk_anything-goes" }));
+    assert.doesNotThrow(() => new SateeProvider({ sdkKey: "satee_server_anything-goes" }));
+  });
+
+  it("rejects a browser key with a message saying so", () => {
+    assert.throws(
+      () => new SateeProvider({ sdkKey: "satee_client_7Rq2mXv9KpL4nTz8WbY3cHd6" }),
+      /^Error: This is a browser key\. Use the server key from the Setup page\.$/,
+    );
   });
 });
 
@@ -126,14 +133,14 @@ describe("a file it refuses to load", () => {
   });
 
   it("keeps the key out of the URL and the key and path id out of the log", async () => {
-    const sdkKey = "satee_sdk_../other?x#9876";
+    const sdkKey = "satee_server_../other?x#9876";
     const { logs, server } = await load(exampleFlags, sdkKey);
     const url = server.requests[0]?.url ?? "";
     const pathId = /^\/v1\/([0-9a-f]{32})\/flags\.json$/.exec(url)?.[1];
     assert.ok(pathId, url);
     assert.match(logs.join("\n"), /^error: .*SDK key not found\. Check SATEE_SDK_KEY\. \(key ending 9876\)/m);
     for (const line of logs) {
-      assert.ok(![sdkKey.slice("satee_sdk_".length), pathId, server.baseUrl].some((leak) => line.includes(leak)));
+      assert.ok(![sdkKey.slice("satee_server_".length), pathId, server.baseUrl].some((leak) => line.includes(leak)));
     }
   });
 });
@@ -154,7 +161,10 @@ it("keeps the key and path id out of the log when the fetch error names the URL"
   await OpenFeature.close();
   assert.match(logs.join("\n"), /Could not load flags yet .*TypeError/);
   for (const line of logs) {
-    assert.ok(![FIXTURE_SDK_KEY.slice("satee_sdk_".length), FIXTURE_PATH_ID].some((leak) => line.includes(leak)), line);
+    assert.ok(
+      ![FIXTURE_SDK_KEY.slice("satee_server_".length), FIXTURE_PATH_ID].some((leak) => line.includes(leak)),
+      line,
+    );
   }
 });
 
