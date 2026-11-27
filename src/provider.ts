@@ -133,6 +133,7 @@ export class SateeProvider implements Provider {
       if (signal.aborted) return;
       const retryAt = Math.max(Date.now(), attemptAt + this.#timing.startupRetryMs);
       if (result.kind !== "failed" || retryAt >= deadline) break;
+      this.#logFailedPoll(result);
       await sleep(Math.max(0, retryAt - Date.now()), undefined, { signal }).catch(() => {});
       if (signal.aborted) return;
     }
@@ -185,13 +186,17 @@ export class SateeProvider implements Provider {
       else this.#begin("error", this.#held ? "SDK key no longer valid" : "SDK key not found. Check SATEE_SDK_KEY.");
       return;
     }
-    if (result.ignoredFile) this.#logger.warn(`Satee: ignored a flag file for ${this.#keyHint} (${result.reason})`);
-    else this.#logger.debug(`Satee: poll failed for ${this.#keyHint} (${result.reason})`);
+    this.#logFailedPoll(result);
     if (!this.#held) {
       if (atStartup) this.#begin("error", "Could not load flags yet", result.reason);
     } else if (Date.now() - this.#lastSuccessAt >= this.#timing.staleAfterMs) {
       this.#begin("stale", "Could not refresh flags; serving the last good values", result.reason);
     }
+  }
+
+  #logFailedPoll(result: { reason: string; ignoredFile?: boolean }): void {
+    if (result.ignoredFile) this.#logger.warn(`Satee: ignored a flag file for ${this.#keyHint} (${result.reason})`);
+    else this.#logger.debug(`Satee: poll failed for ${this.#keyHint} (${result.reason})`);
   }
 
   // An episode runs from the first failure to the next successful poll. A problem is not reported again while it

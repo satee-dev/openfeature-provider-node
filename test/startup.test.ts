@@ -42,13 +42,15 @@ describe("start-up", () => {
     await server.close();
   });
 
-  it("retries until the window ends, then serves defaults until a file arrives", async () => {
+  it("retries until the window ends, logging each failure, then serves defaults until a file arrives", async () => {
     server.respondWith(500);
     const startedAt = Date.now();
     await OpenFeature.setProviderAndWait("startup", provider());
     assert.ok(Date.now() - startedAt >= timing.startupMs - timing.startupRetryMs);
     const attempts = server.requests.length;
     assert.ok(attempts >= 2 && attempts <= timing.startupMs / timing.startupRetryMs + 1, `${attempts} attempts`);
+    await until(() => logs.some((line) => line.includes("Could not load flags yet")), "the start-up Error");
+    assert.equal(logs.filter((line) => line.includes("poll failed") && line.includes("HTTP 500")).length, attempts);
     assert.equal((await value()).errorCode, "PROVIDER_NOT_READY");
     server.serve(exampleFlags);
     await until(async () => (await value()).value, "the file to load");
