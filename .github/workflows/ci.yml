@@ -35,6 +35,10 @@ jobs:
         env:
           NODE_OPTIONS: ${{ matrix.node == '22.12' && '--experimental-strip-types' || '' }}
       - run: npm run build
+      - name: Run the examples against the fixture server
+        run: npm run examples
+        env:
+          NODE_OPTIONS: ${{ matrix.node == '22.12' && '--experimental-strip-types' || '' }}
       - name: Require the ESM build from CommonJS
         run: node -e 'require("./dist/index.js")'
       - run: npm pack --dry-run
