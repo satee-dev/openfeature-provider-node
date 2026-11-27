@@ -5,7 +5,7 @@ import { sha256Hex } from "../src/provider.ts";
 
 const PREFIX = "satee_server_";
 const sdkKey = process.env.SATEE_SDK_KEY;
-const baseUrl = process.env.SATEE_BASE_URL ?? "https://flags-test.satee.dev";
+const baseUrl = process.env.SATEE_BASE_URL ?? "https://flags.satee.dev";
 if (!sdkKey?.startsWith(PREFIX)) fail("Set SATEE_SDK_KEY to a key for the test host.");
 const secret = sdkKey.slice(PREFIX.length);
 const keyHint = secret.length > 8 ? `the key ending ${secret.slice(-4)}` : "the key";

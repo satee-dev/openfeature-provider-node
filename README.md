@@ -35,7 +35,7 @@ Every Satee flag is boolean. Reading a flag is a lookup in memory and never wait
 | ---------------- | -------------------------------- | ------------------------------------------------------------------- |
 | `sdkKey`         | required                         | the server key from the Setup page, with its `satee_server_` prefix |
 | `pollIntervalMs` | `5000`                           | time between polls; values below `1000` are raised to `1000`        |
-| `baseUrl`        | `https://flags.satee.dev`        | another host: a local server in tests, or the test host             |
+| `baseUrl`        | `https://flags.satee.dev`        | another host, such as a local server in tests                       |
 | `logger`         | warnings and errors to `console` | an object with `debug`, `info`, `warn` and `error`                  |
 
 The SDK key is for server code only. Never ship it in browser code: anyone who has it can read every flag.
@@ -119,7 +119,7 @@ npm pack --dry-run
 `npm run format` fixes formatting and safe lint findings in place. Node versions before 22.18 need
 `NODE_OPTIONS=--experimental-strip-types` to run the tests, the examples and `check:live`.
 
-`npm run check:live` reads a real file from the test host, `https://flags-test.satee.dev`, and checks that the
+`npm run check:live` reads a real file from `https://flags.satee.dev` and checks that the
 provider serves it. Set `SATEE_SDK_KEY` to a key for that host, and `SATEE_BASE_URL` to point at another one.
 
 `src/flag-file.ts` holds the file handling a browser provider can share: it imports nothing from `node:`, and the caller
