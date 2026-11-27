@@ -158,6 +158,13 @@ npm version patch
 git push origin main --follow-tags
 ```
 
+## Versioning
+
+The package follows [semver](https://semver.org). While it is at 0.x, the minor number is the breaking one: a minor
+release (`0.x.0`) may break the API, and a patch release (`0.x.y`) never does. Pin it with a tilde range, such as
+`~0.1.0`. On a 0.x version the caret range `npm install` writes, `^0.1.0`, also stops before the next minor, so the
+default is safe too. Read the [changelog](CHANGELOG.md) before a minor upgrade.
+
 ## License
 
 [MIT](LICENSE)
