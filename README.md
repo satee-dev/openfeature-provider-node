@@ -116,6 +116,19 @@ npm pack --dry-run
 `npm run check:live` reads a real file from the test host, `https://flags-test.satee.dev`, and checks that the
 provider serves it. Set `SATEE_SDK_KEY` to a key for that host, and `SATEE_BASE_URL` to point at another one.
 
+## Releasing
+
+Pushing a tag `v<version>` on main, matching `package.json`, runs `.github/workflows/publish.yml`. One job reruns the
+checks and packs the package without any npm credentials. A second job, in the `npm` environment, publishes that exact
+tarball through npm trusted publishing, so no npm token is stored anywhere. The `npm` environment accepts only `v*` tags
+and waits for a maintainer to approve the run. The npm trusted publisher entry names this repository, `publish.yml` and
+the `npm` environment, so renaming any of them breaks publishing until the entry is updated.
+
+```sh
+npm version patch
+git push origin main --follow-tags
+```
+
 ## License
 
 [MIT](LICENSE)
