@@ -85,7 +85,7 @@ The provider never enters the fatal state, so a key that starts working again ne
 
 It logs each `Error` at `error`, each `Stale` and each ignored file at `warn`, a recovery at `info`, and every other
 failed poll at `debug`. The default logger prints only warnings and errors. Log lines name a key by its last four
-characters, or just "key" for a very short one, and never include the key or the file URL.
+characters and never include the key or the file URL.
 
 [`examples/events.js`](examples/events.js) shows a handler for each of these events.
 

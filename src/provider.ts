@@ -117,7 +117,7 @@ export class SateeProvider implements Provider {
     this.#url = flagFilePath(secret, sha256Hex).then((path) => `${baseUrl}${path}`);
     // The first poll reports a rejection; until then it must not reach Node as unhandled, with the key in it.
     this.#url.catch(() => {});
-    this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
+    this.#keyHint = `key ending ${secret.slice(-4)}`;
     this.#logger = neverThrowing(options.logger ?? consoleLogger);
     this.#timing = { ...DEFAULT_TIMING, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };
     const requested = options.pollIntervalMs;
