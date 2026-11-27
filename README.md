@@ -111,7 +111,13 @@ lowest and the latest `@openfeature/server-sdk` the peer range allows:
 The provider reads one JSON file per key, in the [flagd](https://flagd.dev) flag format, without targeting rules. The
 URL holds a hash of the key, never the key itself: the first 32 hex characters of the SHA-256 of `satee-flags-v1:`
 followed by the key without its `satee_server_` prefix. `/v1/` is the version of the file format. To see what your app
-gets:
+gets, copy the flag file URL from the Setup page in Satee:
+
+```sh
+curl "<flag file URL from the Setup page>"
+```
+
+Or build the URL from the key:
 
 ```sh
 KEY="${SATEE_SDK_KEY#satee_server_}"
