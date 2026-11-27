@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { type EventDetails, type Logger, OpenFeature, ProviderEvents, ProviderStatus } from "@openfeature/server-sdk";
 import { SateeProvider } from "../src/index.ts";
 import { testTiming } from "../src/provider.ts";
-import { exampleFlags, FIXTURE_SDK_KEY, type FixtureServer, startFixtureServer } from "./fixture-server.ts";
+import {
+  exampleFlags,
+  FIXTURE_PATH_ID,
+  FIXTURE_SDK_KEY,
+  type FixtureServer,
+  startFixtureServer,
+} from "./fixture-server.ts";
 
 const POLL_MS = 20;
 const timing = { minPollMs: POLL_MS, startupMs: 200, startupRetryMs: 50, staleAfterMs: 150, refusedPollMs: 100 };
@@ -71,7 +77,8 @@ describe("status and events", () => {
     await server.close();
     const secret = FIXTURE_SDK_KEY.slice("satee_sdk_".length);
     for (const line of [...logs, ...events]) {
-      assert.ok(!line.includes(secret) && !line.includes(server.baseUrl), `leaks the key or URL: ${line}`);
+      const leaked = [secret, FIXTURE_PATH_ID, server.baseUrl].some((leak) => line.includes(leak));
+      assert.ok(!leaked, `leaks the key, path id or URL: ${line}`);
     }
   });
 

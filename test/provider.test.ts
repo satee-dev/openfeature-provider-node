@@ -5,7 +5,14 @@ import { ErrorCode, OpenFeature } from "@openfeature/server-sdk";
 import { SateeProvider } from "../src/index.ts";
 import { testTiming } from "../src/provider.ts";
 import { VERSION } from "../src/version.ts";
-import { exampleFlags, FIXTURE_SDK_KEY, type FixtureServer, startFixtureServer } from "./fixture-server.ts";
+import {
+  exampleFlags,
+  FIXTURE_PATH,
+  FIXTURE_PATH_ID,
+  FIXTURE_SDK_KEY,
+  type FixtureServer,
+  startFixtureServer,
+} from "./fixture-server.ts";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -58,7 +65,7 @@ describe("evaluation against the shared fixture", () => {
 
   it("requests the key's file with a User-Agent naming the provider", () => {
     const [request] = server.requests;
-    assert.equal(request?.url, "/v1/fixture0001/flags.json");
+    assert.equal(request?.url, FIXTURE_PATH);
     assert.equal(request?.headers["user-agent"], `satee-openfeature-node/${VERSION}`);
   });
 });
@@ -118,15 +125,37 @@ describe("a file it refuses to load", () => {
     assert.match(logs.join("\n"), /^warn: .*larger than 4 MiB/m);
   });
 
-  it("keeps the key to one path segment and out of the log", async () => {
+  it("keeps the key out of the URL and the key and path id out of the log", async () => {
     const sdkKey = "satee_sdk_../other?x#9876";
     const { logs, server } = await load(exampleFlags, sdkKey);
-    assert.equal(server.requests[0]?.url, "/v1/..%2Fother%3Fx%239876/flags.json");
+    const url = server.requests[0]?.url ?? "";
+    const pathId = /^\/v1\/([0-9a-f]{32})\/flags\.json$/.exec(url)?.[1];
+    assert.ok(pathId, url);
     assert.match(logs.join("\n"), /^error: .*SDK key not found\. Check SATEE_SDK_KEY\. \(key ending 9876\)/m);
     for (const line of logs) {
-      assert.ok(!line.includes(sdkKey.slice("satee_sdk_".length)) && !line.includes(server.baseUrl));
+      assert.ok(![sdkKey.slice("satee_sdk_".length), pathId, server.baseUrl].some((leak) => line.includes(leak)));
     }
   });
+});
+
+it("keeps the key and path id out of the log when the fetch error names the URL", async () => {
+  const logs: string[] = [];
+  const record = (...args: unknown[]) => logs.push(args.join(" "));
+  const logger = { debug: record, info: record, warn: record, error: record };
+  const timing = { startupMs: 20, startupRetryMs: 20 };
+  const provider = new SateeProvider({
+    sdkKey: FIXTURE_SDK_KEY,
+    baseUrl: "http://exa mple",
+    logger,
+    [testTiming]: timing,
+  } as never);
+  await OpenFeature.setProviderAndWait("bad-url", provider);
+  await new Promise((resolve) => setImmediate(resolve));
+  await OpenFeature.close();
+  assert.match(logs.join("\n"), /Could not load flags yet .*TypeError/);
+  for (const line of logs) {
+    assert.ok(![FIXTURE_SDK_KEY.slice("satee_sdk_".length), FIXTURE_PATH_ID].some((leak) => line.includes(leak)), line);
+  }
 });
 
 it("reports the version from package.json", () => {

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { exampleFlags, type FixtureServer, payloads, startFixtureServer } from "./fixture-server.ts";
-
-const path = "/v1/fixture0001/flags.json";
+import {
+  exampleFlags,
+  type FixtureServer,
+  FIXTURE_PATH as path,
+  payloads,
+  startFixtureServer,
+} from "./fixture-server.ts";
 
 describe("fixture server", () => {
   let server: FixtureServer;
@@ -43,10 +47,11 @@ describe("fixture server", () => {
     assert.equal((await get(`${path}?x=1`)).status, 403);
     assert.equal((await get("/fixture0001/other.json")).status, 403);
     assert.equal((await get("/fixture0001/flags.json")).status, 403);
+    assert.equal((await get("/v1/fixture0001/flags.json")).status, 403);
   });
 
-  it("answers an unknown key with 404", async () => {
-    assert.equal((await get("/v1/unknown/flags.json")).status, 404);
+  it("answers an unknown path id with 404", async () => {
+    assert.equal((await get(`/v1/${"0".repeat(32)}/flags.json`)).status, 404);
   });
 
   it("returns the status it is told to", async () => {

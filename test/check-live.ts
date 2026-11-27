@@ -1,5 +1,6 @@
 import { OpenFeature } from "@openfeature/server-sdk";
 import { parseFlagFile, readBody } from "../src/flag-file.ts";
+import { flagFilePath } from "../src/flag-path.ts";
 import { SateeProvider } from "../src/index.ts";
 
 const PREFIX = "satee_sdk_";
@@ -22,7 +23,7 @@ function describe(error: unknown): string {
 
 let response: Response;
 try {
-  response = await fetch(`${baseUrl}/v1/${encodeURIComponent(secret)}/flags.json`, {
+  response = await fetch(`${baseUrl}${flagFilePath(secret)}`, {
     signal: AbortSignal.timeout(10_000),
   });
 } catch (error) {

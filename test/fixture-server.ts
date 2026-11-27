@@ -4,7 +4,8 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 
 export const FIXTURE_SDK_KEY = "satee_sdk_fixture0001";
-const FIXTURE_PATH_KEY = FIXTURE_SDK_KEY.slice("satee_sdk_".length);
+export const FIXTURE_PATH_ID = "60e6e51f7ce47efdebc3e3b395108960";
+export const FIXTURE_PATH = `/v1/${FIXTURE_PATH_ID}/flags.json`;
 
 export const exampleFlags = readFileSync(new URL("./fixtures/flags.example.json", import.meta.url), "utf8");
 
@@ -72,12 +73,11 @@ export async function startFixtureServer(
     res.on("close", () => {
       recorded.abandoned = !res.writableFinished;
     });
-    const match = /^\/v1\/([^/?]+)\/flags\.json$/.exec(req.url ?? "");
-    if (!match) {
+    if (!/^\/v1\/[0-9a-f]{32}\/flags\.json$/.test(req.url ?? "")) {
       res.writeHead(403).end();
       return;
     }
-    if (match[1] !== FIXTURE_PATH_KEY) {
+    if (req.url !== FIXTURE_PATH) {
       res.writeHead(404).end();
       return;
     }

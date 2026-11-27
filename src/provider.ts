@@ -11,6 +11,7 @@ import {
   StandardResolutionReasons,
 } from "@openfeature/server-sdk";
 import { changedKeys, FlagFileError, type FlagSet, parseFlagFile, readBody } from "./flag-file.ts";
+import { flagFilePath } from "./flag-path.ts";
 import { VERSION } from "./version.ts";
 
 const KEY_PREFIX = "satee_sdk_";
@@ -58,6 +59,7 @@ type PollResult =
 
 type Episode = { kind: "error" | "stale"; message: string };
 
+// Never the message of other errors: fetch puts the whole URL, path id included, in some of them.
 function describeFailure(error: unknown): string {
   if (error instanceof FlagFileError) return error.message;
   if (!(error instanceof Error)) return "unknown error";
@@ -93,7 +95,7 @@ export class SateeProvider implements Provider {
     }
     const baseUrl = (options.baseUrl ?? "https://flags.satee.dev").replace(/\/+$/, "");
     const secret = sdkKey.slice(KEY_PREFIX.length);
-    this.#url = `${baseUrl}/v1/${encodeURIComponent(secret)}/flags.json`;
+    this.#url = `${baseUrl}${flagFilePath(secret)}`;
     this.#keyHint = secret.length > 8 ? `key ending ${secret.slice(-4)}` : "key";
     this.#logger = neverThrowing(options.logger ?? consoleLogger);
     this.#timing = { ...DEFAULT_TIMING, ...(options as { [testTiming]?: Partial<Timing> })[testTiming] };

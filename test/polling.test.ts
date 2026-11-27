@@ -5,7 +5,14 @@ import { promisify } from "node:util";
 import { type EventDetails, OpenFeature, ProviderEvents } from "@openfeature/server-sdk";
 import { SateeProvider } from "../src/index.ts";
 import { testTiming } from "../src/provider.ts";
-import { exampleFlags, FIXTURE_SDK_KEY, type FixtureServer, payloads, startFixtureServer } from "./fixture-server.ts";
+import {
+  exampleFlags,
+  FIXTURE_PATH,
+  FIXTURE_SDK_KEY,
+  type FixtureServer,
+  payloads,
+  startFixtureServer,
+} from "./fixture-server.ts";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const POLL_MS = 20;
@@ -36,8 +43,7 @@ describe("polling", () => {
     await OpenFeature.setProviderAndWait("polling", provider);
     return provider;
   };
-  const currentEtag = async () =>
-    (await fetch(`${server.baseUrl}/v1/fixture0001/flags.json`)).headers.get("etag") ?? "";
+  const currentEtag = async () => (await fetch(`${server.baseUrl}${FIXTURE_PATH}`)).headers.get("etag") ?? "";
   const pollsAfter = async (count: number) => {
     const target = server.requests.length + count;
     await until(() => server.requests.length >= target, `${count} more polls`);
