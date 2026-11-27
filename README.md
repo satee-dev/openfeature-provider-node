@@ -114,6 +114,7 @@ npm test
 npm run build
 npm run examples
 npm pack --dry-run
+npm run check:types
 ```
 
 `npm run format` fixes formatting and safe lint findings in place. Node versions before 22.18 need

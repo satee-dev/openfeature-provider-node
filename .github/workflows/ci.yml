@@ -42,3 +42,5 @@ jobs:
       - name: Require the ESM build from CommonJS
         run: node -e 'require("./dist/index.js")'
       - run: npm pack --dry-run
+      - name: Check the packed types with attw
+        run: npm run check:types
