@@ -90,6 +90,19 @@ characters, or just "key" for a very short one, and never include the key or the
 
 Node 22.12 or later. The package is ESM only, and CommonJS can load it with `require()`.
 
+## TypeScript
+
+The package ships its own types for TypeScript 5.8 or later, and they pass with `"strict": true` and
+`"skipLibCheck": false`. CI type-checks these settings with TypeScript 5.8 and the latest TypeScript, against the
+lowest and the latest `@openfeature/server-sdk` the peer range allows:
+
+- `"module": "nodenext"`, from an ES module, top-level `await` included.
+- `"module": "nodenext"`, from CommonJS (a `.cts` file). TypeScript 5.7 and earlier refuse to import an ES module
+  from CommonJS, and so does `"module": "node16"` on any version.
+- `"moduleResolution": "bundler"`.
+
+`"moduleResolution": "node10"` (the old `"node"`) cannot see the package's `exports` and is not supported.
+
 ## Reading the file directly
 
 The provider reads one JSON file per key, in the [flagd](https://flagd.dev) flag format, without targeting rules. The
@@ -115,6 +128,7 @@ npm run build
 npm run examples
 npm pack --dry-run
 npm run check:types
+npm run check:consumers
 ```
 
 `npm run format` fixes formatting and safe lint findings in place. Node versions before 22.18 need

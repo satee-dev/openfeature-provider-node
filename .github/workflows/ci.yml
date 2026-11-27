@@ -44,3 +44,7 @@ jobs:
       - run: npm pack --dry-run
       - name: Check the packed types with attw
         run: npm run check:types
+      - name: Type-check consumer projects against the packed package
+        run: npm run check:consumers
+        env:
+          NODE_OPTIONS: ${{ matrix.node == '22.12' && '--experimental-strip-types' || '' }}

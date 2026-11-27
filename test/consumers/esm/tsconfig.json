@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "target": "es2022",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": false,
+    "noEmit": true
+  }
+}

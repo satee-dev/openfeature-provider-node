@@ -40,7 +40,8 @@
     "build": "tsc -p tsconfig.build.json",
     "examples": "node test/run-examples.ts",
     "check:live": "node test/check-live.ts",
-    "check:types": "npm run build && attw --pack . --profile node16 --ignore-rules cjs-resolves-to-esm"
+    "check:types": "npm run build && attw --pack . --profile node16 --ignore-rules cjs-resolves-to-esm",
+    "check:consumers": "npm run build && node test/run-consumers.ts"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
