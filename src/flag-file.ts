@@ -110,7 +110,11 @@ export function parseFlagFile(body: string, heldRevision: number | undefined, lo
     warn: (...args) => logger.warn("Satee: flagd:", ...args),
     error: (...args) => logger.error("Satee: flagd:", ...args),
   });
-  evaluator.setConfigurations(JSON.stringify({ flags: flagsOnly, metadata: file.metadata }));
+  try {
+    evaluator.setConfigurations(JSON.stringify({ flags: flagsOnly, metadata: file.metadata }));
+  } catch {
+    throw new FlagFileError("file is not a valid flagd configuration");
+  }
   return { revision, flags: flagsOnly as Record<string, Flag>, evaluator };
 }
 

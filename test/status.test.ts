@@ -8,6 +8,7 @@ import {
   FIXTURE_PATH_ID,
   FIXTURE_SDK_KEY,
   type FixtureServer,
+  payloads,
   startFixtureServer,
 } from "./fixture-server.ts";
 
@@ -187,6 +188,26 @@ describe("status and events", () => {
     server.serve("{ not json");
     await morePolls(4);
     assert.equal(logs.filter((line) => line.includes("ignored a flag file")).length, 1);
+    assert.equal((await value()).value, true);
+  });
+
+  it("warns once about a file flagd-core rejects, and keeps the last good flags", async () => {
+    const levelled: string[] = [];
+    const at =
+      (level: string) =>
+      (...args: unknown[]) =>
+        levelled.push(`${level}: ${args.join(" ")}`);
+    await start({ debug: at("debug"), info: at("info"), warn: at("warn"), error: at("error") });
+    server.serve(
+      payloads.revision(43, (file) => {
+        file.flags["new-checkout"] = { state: "BROKEN", variants: { on: true, off: false }, defaultVariant: "off" };
+      }),
+    );
+    await morePolls(4);
+    assert.deepEqual(
+      levelled.filter((line) => !line.startsWith("debug: ")),
+      ["warn: Satee: ignored a flag file for key ending 4Pj6 (file is not a valid flagd configuration)"],
+    );
     assert.equal((await value()).value, true);
   });
 });

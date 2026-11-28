@@ -132,6 +132,17 @@ describe("polling", () => {
     for (const [name, body] of [
       ["broken JSON", payloads.brokenJson],
       ["a defaultVariant missing from variants", payloads.flagWithoutVariant],
+      [
+        "a flag in an unknown state",
+        payloads.revision(43, (file) => (file.flags["beta-banner"] = { ...ON, state: "BROKEN" })),
+      ],
+      [
+        "a flag without a state",
+        payloads.revision(43, (file) => {
+          file.flags["beta-banner"] = { ...ON };
+          delete (file.flags["beta-banner"] as { state?: string }).state;
+        }),
+      ],
       ["no revision", payloads.withoutRevision],
       ["a lower revision", payloads.lowerRevision],
       ["a fractional revision", payloads.revision(42.5, (file) => (file.flags["beta-banner"] = ON))],
