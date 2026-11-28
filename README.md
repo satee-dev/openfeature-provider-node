@@ -31,12 +31,12 @@ Every Satee flag is boolean. Reading a flag is a lookup in memory and never wait
 
 ## Options
 
-| Option           | Default                          | Meaning                                                             |
-| ---------------- | -------------------------------- | ------------------------------------------------------------------- |
-| `sdkKey`         | required                         | the server key from the Setup page, with its `satee_server_` prefix |
-| `pollIntervalMs` | `5000`                           | time between polls; values below `1000` are raised to `1000`        |
-| `baseUrl`        | `https://flags.satee.dev`        | another host, such as a local server in tests                       |
-| `logger`         | warnings and errors to `console` | an object with `debug`, `info`, `warn` and `error`                  |
+| Option           | Default                          | Meaning                                                                                            |
+| ---------------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `sdkKey`         | required                         | the server key from the Setup page, with its `satee_server_` prefix                                |
+| `pollIntervalMs` | `5000`                           | time between polls; values below `1000` are raised to `1000`, and `NaN` or `Infinity` means `5000` |
+| `baseUrl`        | `https://flags.satee.dev`        | another host, such as a local server in tests                                                      |
+| `logger`         | warnings and errors to `console` | an object with `debug`, `info`, `warn` and `error`                                                 |
 
 The SDK key is for server code only. Never ship it in browser code: anyone who has it can read every flag.
 
@@ -71,8 +71,9 @@ reported once, when it starts, not on every failed poll.
   arrives, on the tick after the `await`, `providerStatus` still reads `READY`, so check for the `Error` event or
   evaluate a flag rather than reading the status. A handler added after the failure gets the SDK's replay of the
   `Error`, without the message.
-- **No successful poll for 60 seconds** after flags were loaded: the provider emits `Stale` with "Could not refresh
-  flags; serving the last good values", and keeps serving them.
+- **No successful poll for 60 seconds** after flags were loaded: on the first failed poll 60 seconds or more after the
+  last successful one, the provider emits `Stale` with "Could not refresh flags; serving the last good values", and
+  keeps serving them. It does not emit `Stale` while an `Error` is already reported.
 - **The key is not found (`404`)**: the provider emits `Error` with "SDK key not found. Check SATEE_SDK_KEY." if no
   flags were loaded yet, or "SDK key no longer valid" if they were. Loaded flags keep being served; with none, every
   flag returns `PROVIDER_NOT_READY`. Polling slows to once a minute, or to `pollIntervalMs` if that is longer.
@@ -135,6 +136,7 @@ npm run typecheck
 npm test
 npm run build
 npm run examples
+node -e 'require("./dist/index.js")'
 npm pack --dry-run
 npm run check:types
 npm run check:consumers
